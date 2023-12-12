@@ -17,6 +17,12 @@ private let storeLogger = Logger(
     category: "store"
 )
 
+public protocol AppProductDelegate: AnyObject {
+    func onProductVerified(id: String)
+    func onProductRevocated(id: String)
+    func onProductExpired(id: String)
+}
+
 /// Provides easy access to the in-app purchase products.
 ///
 /// You initialize this class by passing your identifiers, and the blocks to handle transcation changes.
@@ -27,7 +33,6 @@ private let storeLogger = Logger(
 /// To restore App Store, use ``restore()``.
 ///
 /// To purchase a product, use ``purchase(product:)``.
-@MainActor
 @available(iOS 15.0, macOS 12.0, *)
 public class AppProduct: ObservableObject {
     private let observer: TransactionObserver
@@ -46,31 +51,20 @@ public class AppProduct: ObservableObject {
     /// The identifiers you pass in the initializer.
     public let identifiers: [String]
     
-    /// The onProductVerified block you pass in the initializer.
-    public let onProductVerified: (String) -> Void
-    
-    /// The onProductRevocated block you pass in the initializer.
-    public let onProductRevocated: (String) -> Void
+    private weak var delegate: AppProductDelegate?
     
     /// Initialize using your own identifiers and blocks to handle transcation events.
     /// - parameter identifiers: your product identifiers in an array
     /// - parameter onProductVerified: the block to be invoked when a product is verfied
     /// - parameter onProductRevocated: the block to be invoked when a product is revocated
-    public init(
-        identifiers: [String],
-        onProductVerified: @escaping (String) -> Void,
-        onProductRevocated: @escaping (String) -> Void,
-        onProductExpired: @escaping (String) -> Void
-    ) {
+    public init(identifiers: [String]) {
         self.identifiers = identifiers
-        self.observer = TransactionObserver(
-            identifiers: identifiers,
-            onProductVerified: onProductVerified,
-            onProductRevocated: onProductRevocated,
-            onProductExpired: onProductExpired
-        )
-        self.onProductVerified = onProductVerified
-        self.onProductRevocated = onProductRevocated
+        self.observer = TransactionObserver(identifiers: identifiers)
+    }
+    
+    public func setDelegate(delegate: AppProductDelegate?) {
+        self.delegate = delegate
+        self.observer.delegate = delegate
     }
     
     public func restore() async throws {
@@ -185,7 +179,7 @@ public class AppProduct: ObservableObject {
                 resolved.append(ResolvedProduct(product: product, isActive: handledTranscation != nil))
             } else {
                 storeLogger.error("no latestTransaction for \(product.id)")
-                onProductRevocated(product.id)
+                delegate?.onProductRevocated(id: product.id)
                 resolved.append(ResolvedProduct(product: product, isActive: false))
             }
         }
@@ -194,25 +188,14 @@ public class AppProduct: ObservableObject {
     }
 }
 
-@MainActor
 @available(iOS 15.0, macOS 12.0, *)
 fileprivate final class TransactionObserver {
     var updates: Task<Void, Never>? = nil
     let identifiers: [String]
-    let onProductVerified: (String) -> Void
-    let onProductRevocated: (String) -> Void
-    let onProductExpired: (String) -> Void
+    weak var delegate: AppProductDelegate?
     
-    init(
-        identifiers: [String],
-        onProductVerified: @escaping (String) -> Void,
-        onProductRevocated: @escaping (String) -> Void,
-        onProductExpired: @escaping (String) -> Void
-    ) {
+    init(identifiers: [String]) {
         self.identifiers = identifiers
-        self.onProductVerified = onProductVerified
-        self.onProductRevocated = onProductRevocated
-        self.onProductExpired = onProductExpired
         self.updates = newTransactionListenerTask()
     }
     
@@ -247,12 +230,12 @@ fileprivate final class TransactionObserver {
             // Remove access to the product identified by transaction.productID.
             // Transaction.revocationReason provides details about
             // the revoked transaction.
-            onProductRevocated(transaction.productID)
+            delegate?.onProductRevocated(id: transaction.productID)
             return nil
         } else if let expirationDate = transaction.expirationDate,
                   expirationDate < Date() {
             // Do nothing, this subscription is expired.
-            onProductExpired(transaction.productID)
+            delegate?.onProductExpired(id: transaction.productID)
             return nil
         } else if transaction.isUpgraded {
             // Do nothing, there is an active transaction
@@ -263,7 +246,7 @@ fileprivate final class TransactionObserver {
             // transaction.productID.
             let productId = transaction.productID
             storeLogger.log("handle updatedTransaction, provide access to \(productId)")
-            onProductVerified(productId)
+            delegate?.onProductVerified(id: productId)
             return transaction
         }
     }
