@@ -51,6 +51,8 @@ public class AppProduct: ObservableObject {
     /// The identifiers you pass in the initializer.
     public let identifiers: [String]
     
+    public private(set) var transaction: SwiftUI.Transaction = .init()
+    
     private weak var delegate: AppProductDelegate?
     
     /// Initialize using your own identifiers and blocks to handle transcation events.
@@ -62,18 +64,22 @@ public class AppProduct: ObservableObject {
         self.observer = TransactionObserver(identifiers: identifiers)
     }
     
+    public func setTransaction(_ transaction: SwiftUI.Transaction) {
+        self.transaction = transaction
+    }
+    
     public func setDelegate(delegate: AppProductDelegate?) {
         self.delegate = delegate
         self.observer.delegate = delegate
     }
     
     public func restore() async throws {
-        withAnimation {
+        withTransaction(transaction) {
             self.isLoading = true
         }
         
         defer {
-            withAnimation {
+            withTransaction(transaction) {
                 self.isLoading = false
             }
         }
@@ -91,7 +97,7 @@ public class AppProduct: ObservableObject {
     }
     
     public func loadProducts() async {
-        withAnimation {
+        withTransaction(transaction) {
             self.isLoading = true
         }
         
@@ -100,13 +106,13 @@ public class AppProduct: ObservableObject {
             storeLogger.log("products are \(appProducts.count)")
             
             let products = await refreshProductTranscation(products: appProducts)
-            withAnimation {
+            withTransaction(transaction) {
                 self.products = products
                 self.isLoading = false
             }
         } catch {
             storeLogger.log("error on getting products \(error)")
-            withAnimation {
+            withTransaction(transaction) {
                 self.isLoading = false
             }
         }
@@ -116,7 +122,7 @@ public class AppProduct: ObservableObject {
         do {
             storeLogger.log("begin purchase \(product.displayName)")
             
-            withAnimation {
+            withTransaction(transaction) {
                 isLoading = true
             }
             
@@ -144,13 +150,13 @@ public class AppProduct: ObservableObject {
             
             storeLogger.log("end purchase \(product.displayName)")
             
-            withAnimation {
+            withTransaction(transaction) {
                 self.isLoading = false
             }
         } catch {
             storeLogger.log("error on purchasing products \(error)")
             
-            withAnimation {
+            withTransaction(transaction) {
                 self.isLoading = false
             }
             
