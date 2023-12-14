@@ -179,12 +179,14 @@ public class AppProduct: ObservableObject {
     private func refreshProductTranscation(products: [Product]) async -> [ResolvedProduct] {
         var resolved: [ResolvedProduct] = []
         
+        storeLogger.log("refreshProductTranscation")
+        
         for product in products {
-            if let transaction = await product.latestTransaction {
+            if let transaction = await product.currentEntitlement {
                 let handledTranscation = observer.handle(updatedTransaction: transaction)
                 resolved.append(ResolvedProduct(product: product, isActive: handledTranscation != nil))
             } else {
-                storeLogger.error("no latestTransaction for \(product.id)")
+                storeLogger.error("no currentEntitlement for \(product.id)")
                 delegate?.onProductRevocated(id: product.id)
                 resolved.append(ResolvedProduct(product: product, isActive: false))
             }
@@ -210,10 +212,14 @@ fileprivate final class TransactionObserver {
         // Cancel the update handling task when you deinitialize the class.
         updatesTask?.cancel()
         unfinishedTask?.cancel()
+        
+        storeLogger.log("cancel TransactionObserver")
     }
     
     private func newTransactionListenerTask() {
         updatesTask = Task(priority: .background) {
+            storeLogger.log("begin observe updates")
+            
             for await verificationResult in Transaction.updates {
                 storeLogger.log("handle updates")
                 if let transaction = self.handle(updatedTransaction: verificationResult) {
@@ -223,6 +229,8 @@ fileprivate final class TransactionObserver {
         }
         
         unfinishedTask = Task(priority: .background) {
+            storeLogger.log("begin observe unfinished")
+
             for await verificationResult in Transaction.unfinished {
                 storeLogger.log("handle unfinished")
                 if let transaction = self.handle(updatedTransaction: verificationResult) {
@@ -244,12 +252,15 @@ fileprivate final class TransactionObserver {
             return nil
         }
         
-        storeLogger.log("handle updatedTransaction")
+        storeLogger.log("handle updatedTransaction, expirationDate: \(String(describing: transaction.expirationDate)) for \(transaction.productID)")
         
         if let _ = transaction.revocationDate {
             // Remove access to the product identified by transaction.productID.
             // Transaction.revocationReason provides details about
             // the revoked transaction.
+            if #available(iOS 15.4, *) {
+                storeLogger.log("revocated, reasons: \(String(describing: transaction.revocationReason?.localizedDescription))")
+            }
             delegate?.onProductRevocated(id: transaction.productID)
             return nil
         } else if let expirationDate = transaction.expirationDate,
