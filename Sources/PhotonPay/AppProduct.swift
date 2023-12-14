@@ -199,7 +199,6 @@ public class AppProduct: ObservableObject {
 @available(iOS 15.0, macOS 12.0, *)
 fileprivate final class TransactionObserver {
     var updatesTask: Task<Void, Never>? = nil
-    var unfinishedTask: Task<Void, Never>? = nil
     let identifiers: [String]
     weak var delegate: AppProductDelegate?
     
@@ -211,8 +210,6 @@ fileprivate final class TransactionObserver {
     deinit {
         // Cancel the update handling task when you deinitialize the class.
         updatesTask?.cancel()
-        unfinishedTask?.cancel()
-        
         storeLogger.log("cancel TransactionObserver")
     }
     
@@ -220,19 +217,11 @@ fileprivate final class TransactionObserver {
         updatesTask = Task(priority: .background) {
             storeLogger.log("begin observe updates")
             
+            // Any unfinished transactions will be emitted from `updates` when you first iterate the sequence.
+            // Thus we need not to iterate the unfinished sequences.
+            // When there are unfinished updates, the order of updates will be ascent by date.
             for await verificationResult in Transaction.updates {
                 storeLogger.log("handle updates")
-                if let transaction = self.handle(updatedTransaction: verificationResult) {
-                    await transaction.finish()
-                }
-            }
-        }
-        
-        unfinishedTask = Task(priority: .background) {
-            storeLogger.log("begin observe unfinished")
-
-            for await verificationResult in Transaction.unfinished {
-                storeLogger.log("handle unfinished")
                 if let transaction = self.handle(updatedTransaction: verificationResult) {
                     await transaction.finish()
                 }
@@ -262,12 +251,12 @@ fileprivate final class TransactionObserver {
                 storeLogger.log("revocated, reasons: \(String(describing: transaction.revocationReason?.localizedDescription))")
             }
             delegate?.onProductRevocated(id: transaction.productID)
-            return nil
+            return transaction
         } else if let expirationDate = transaction.expirationDate,
                   expirationDate < Date() {
             // Do nothing, this subscription is expired.
             delegate?.onProductExpired(id: transaction.productID)
-            return nil
+            return transaction
         } else if transaction.isUpgraded {
             // Do nothing, there is an active transaction
             // for a higher level of service.
