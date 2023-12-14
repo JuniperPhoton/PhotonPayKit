@@ -216,14 +216,18 @@ fileprivate final class TransactionObserver {
         updatesTask = Task(priority: .background) {
             for await verificationResult in Transaction.updates {
                 storeLogger.log("handle updates")
-                self.handle(updatedTransaction: verificationResult)
+                if let transaction = self.handle(updatedTransaction: verificationResult) {
+                    await transaction.finish()
+                }
             }
         }
         
         unfinishedTask = Task(priority: .background) {
             for await verificationResult in Transaction.unfinished {
                 storeLogger.log("handle unfinished")
-                self.handle(updatedTransaction: verificationResult)
+                if let transaction = self.handle(updatedTransaction: verificationResult) {
+                    await transaction.finish()
+                }
             }
         }
     }
@@ -256,7 +260,10 @@ fileprivate final class TransactionObserver {
         } else if transaction.isUpgraded {
             // Do nothing, there is an active transaction
             // for a higher level of service.
-            return nil
+            let productId = transaction.productID
+            storeLogger.log("transaction.isUpgraded, provide access to \(productId)")
+            delegate?.onProductVerified(id: productId)
+            return transaction
         } else {
             // Provide access to the product identified by
             // transaction.productID.
