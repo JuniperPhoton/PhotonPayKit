@@ -196,23 +196,33 @@ public class AppProduct: ObservableObject {
 
 @available(iOS 15.0, macOS 12.0, *)
 fileprivate final class TransactionObserver {
-    var updates: Task<Void, Never>? = nil
+    var updatesTask: Task<Void, Never>? = nil
+    var unfinishedTask: Task<Void, Never>? = nil
     let identifiers: [String]
     weak var delegate: AppProductDelegate?
     
     init(identifiers: [String]) {
         self.identifiers = identifiers
-        self.updates = newTransactionListenerTask()
+        newTransactionListenerTask()
     }
     
     deinit {
         // Cancel the update handling task when you deinitialize the class.
-        updates?.cancel()
+        updatesTask?.cancel()
+        unfinishedTask?.cancel()
     }
     
-    private func newTransactionListenerTask() -> Task<Void, Never> {
-        Task(priority: .background) {
+    private func newTransactionListenerTask() {
+        updatesTask = Task(priority: .background) {
             for await verificationResult in Transaction.updates {
+                storeLogger.log("handle updates")
+                self.handle(updatedTransaction: verificationResult)
+            }
+        }
+        
+        unfinishedTask = Task(priority: .background) {
+            for await verificationResult in Transaction.unfinished {
+                storeLogger.log("handle unfinished")
                 self.handle(updatedTransaction: verificationResult)
             }
         }
