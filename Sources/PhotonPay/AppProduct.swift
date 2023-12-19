@@ -247,7 +247,7 @@ fileprivate final class TransactionObserver {
             // Remove access to the product identified by transaction.productID.
             // Transaction.revocationReason provides details about
             // the revoked transaction.
-            if #available(iOS 15.4, *) {
+            if #available(iOS 15.4, macOS 12.3, *) {
                 storeLogger.log("revocated, reasons: \(String(describing: transaction.revocationReason?.localizedDescription))")
             }
             delegate?.onProductRevocated(id: transaction.productID)
