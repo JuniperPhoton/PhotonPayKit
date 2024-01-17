@@ -183,8 +183,8 @@ public class AppProduct: ObservableObject {
         
         for product in products {
             if let transaction = await product.currentEntitlement {
-                let handledTranscation = observer.handle(updatedTransaction: transaction)
-                resolved.append(ResolvedProduct(product: product, isActive: handledTranscation != nil))
+                let handledTransaction = observer.handle(updatedTransaction: transaction)
+                resolved.append(ResolvedProduct(product: product, isActive: handledTransaction != nil))
             } else {
                 storeLogger.error("no currentEntitlement for \(product.id)")
                 delegate?.onProductRevocated(id: product.id)
@@ -251,12 +251,12 @@ fileprivate final class TransactionObserver {
                 storeLogger.log("revocated, reasons: \(String(describing: transaction.revocationReason?.localizedDescription))")
             }
             delegate?.onProductRevocated(id: transaction.productID)
-            return transaction
+            return nil
         } else if let expirationDate = transaction.expirationDate,
                   expirationDate < Date() {
             // Do nothing, this subscription is expired.
             delegate?.onProductExpired(id: transaction.productID)
-            return transaction
+            return nil
         } else if transaction.isUpgraded {
             // Do nothing, there is an active transaction
             // for a higher level of service.
