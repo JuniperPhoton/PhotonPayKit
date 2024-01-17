@@ -137,6 +137,7 @@ public class AppProduct: ObservableObject {
                     storeLogger.log("purchase success")
                     await loadProducts()
                     await transaction.finish()
+                    storeLogger.log("finish transaction \(transaction.id)")
                 } else {
                     storeLogger.log("purchase error, not verififed")
                 }
@@ -184,7 +185,7 @@ public class AppProduct: ObservableObject {
         for product in products {
             if let transaction = await product.currentEntitlement {
                 let handledTransaction = observer.handle(updatedTransaction: transaction)
-                resolved.append(ResolvedProduct(product: product, isActive: handledTransaction != nil))
+                resolved.append(ResolvedProduct(product: product, isActive: handledTransaction?.isActive == true))
             } else {
                 storeLogger.error("no currentEntitlement for \(product.id)")
                 delegate?.onProductRevocated(id: product.id)
@@ -222,15 +223,16 @@ fileprivate final class TransactionObserver {
             // When there are unfinished updates, the order of updates will be ascent by date.
             for await verificationResult in Transaction.updates {
                 storeLogger.log("handle updates")
-                if let transaction = self.handle(updatedTransaction: verificationResult) {
-                    await transaction.finish()
+                if let result = self.handle(updatedTransaction: verificationResult) {
+                    await result.transaction.finish()
+                    storeLogger.log("finish transaction \(result.transaction.id)")
                 }
             }
         }
     }
     
     @discardableResult
-    func handle(updatedTransaction verificationResult: VerificationResult<StoreKit.Transaction>) -> StoreKit.Transaction? {
+    func handle(updatedTransaction verificationResult: VerificationResult<StoreKit.Transaction>) -> ResolvedTransactionResult? {
         guard case .verified(let transaction) = verificationResult else {
             // Ignore unverified transactions.
             storeLogger.log("handle but verificationResult is verified")
@@ -251,26 +253,31 @@ fileprivate final class TransactionObserver {
                 storeLogger.log("revocated, reasons: \(String(describing: transaction.revocationReason?.localizedDescription))")
             }
             delegate?.onProductRevocated(id: transaction.productID)
-            return nil
+            return .init(transaction: transaction, isActive: false)
         } else if let expirationDate = transaction.expirationDate,
                   expirationDate < Date() {
             // Do nothing, this subscription is expired.
             delegate?.onProductExpired(id: transaction.productID)
-            return nil
+            return .init(transaction: transaction, isActive: false)
         } else if transaction.isUpgraded {
             // Do nothing, there is an active transaction
             // for a higher level of service.
             let productId = transaction.productID
             storeLogger.log("transaction.isUpgraded, provide access to \(productId)")
             delegate?.onProductVerified(id: productId)
-            return transaction
+            return .init(transaction: transaction, isActive: true)
         } else {
             // Provide access to the product identified by
             // transaction.productID.
             let productId = transaction.productID
             storeLogger.log("handle updatedTransaction, provide access to \(productId)")
             delegate?.onProductVerified(id: productId)
-            return transaction
+            return .init(transaction: transaction, isActive: true)
         }
     }
+}
+
+private struct ResolvedTransactionResult {
+    let transaction: StoreKit.Transaction
+    let isActive: Bool
 }
