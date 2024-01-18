@@ -73,6 +73,7 @@ public class AppProduct: ObservableObject {
         self.observer.delegate = delegate
     }
     
+    @MainActor
     public func restore() async throws {
         withTransaction(transaction) {
             self.isLoading = true
@@ -96,6 +97,7 @@ public class AppProduct: ObservableObject {
         }
     }
     
+    @MainActor
     public func loadProducts() async {
         withTransaction(transaction) {
             self.isLoading = true
@@ -118,6 +120,7 @@ public class AppProduct: ObservableObject {
         }
     }
     
+    @MainActor
     public func purchase(product: Product) async throws {
         do {
             storeLogger.log("begin purchase \(product.displayName)")
