@@ -25,7 +25,7 @@ public protocol AppProductDelegate: AnyObject {
 
 /// Provides easy access to the in-app purchase products.
 ///
-/// You initialize this class by passing your identifiers, and the blocks to handle transcation changes.
+/// You initialize this class by passing your identifiers, and the blocks to handle transaction changes.
 ///
 /// It's an ``ObservableObject`` and it provides ``products`` and ``isLoading`` to be observed.
 ///
@@ -55,9 +55,9 @@ public class AppProduct: ObservableObject {
     
     private weak var delegate: AppProductDelegate?
     
-    /// Initialize using your own identifiers and blocks to handle transcation events.
+    /// Initialize using your own identifiers and blocks to handle transaction events.
     /// - parameter identifiers: your product identifiers in an array
-    /// - parameter onProductVerified: the block to be invoked when a product is verfied
+    /// - parameter onProductVerified: the block to be invoked when a product is verified
     /// - parameter onProductRevocated: the block to be invoked when a product is revocated
     public init(identifiers: [String]) {
         self.identifiers = identifiers
@@ -107,7 +107,7 @@ public class AppProduct: ObservableObject {
             let appProducts = try await Product.products(for: identifiers)
             storeLogger.log("products are \(appProducts.count)")
             
-            let products = await refreshProductTranscation(products: appProducts)
+            let products = await refreshProductTransaction(products: appProducts)
             withTransaction(transaction) {
                 self.products = products
                 self.isLoading = false
@@ -142,7 +142,7 @@ public class AppProduct: ObservableObject {
                     await transaction.finish()
                     storeLogger.log("finish transaction \(transaction.id)")
                 } else {
-                    storeLogger.log("purchase error, not verififed")
+                    storeLogger.log("purchase error, not verified")
                 }
             case .userCancelled:
                 storeLogger.log("user cancelled")
@@ -180,10 +180,10 @@ public class AppProduct: ObservableObject {
         }
     }
     
-    private func refreshProductTranscation(products: [Product]) async -> [ResolvedProduct] {
+    private func refreshProductTransaction(products: [Product]) async -> [ResolvedProduct] {
         var resolved: [ResolvedProduct] = []
         
-        storeLogger.log("refreshProductTranscation")
+        storeLogger.log("refreshProductTransaction")
         
         for product in products {
             if let transaction = await product.currentEntitlement {
@@ -212,7 +212,7 @@ fileprivate final class TransactionObserver {
     }
     
     deinit {
-        // Cancel the update handling task when you deinitialize the class.
+        // Cancel the update handling task when you de-initialize the class.
         updatesTask?.cancel()
         storeLogger.log("cancel TransactionObserver")
     }
